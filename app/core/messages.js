@@ -1,151 +1,163 @@
 'use strict';
 
 var _ = require('lodash'),
-    mongoose = require('mongoose'),
     helpers = require('./helpers');
+
+const DbModel = require('../models/');
 
 function MessageManager(options) {
     this.core = options.core;
 }
 
 MessageManager.prototype.create = function(options, cb) {
-    var Message = mongoose.model('Message'),
-        Room = mongoose.model('Room'),
-        User = mongoose.model('User');
-
-    if (typeof cb !== 'function') {
-        cb = function() {};
+  if (typeof cb !== 'function') {
+    cb = function() {};
+  }
+  let t = null;
+  let db_room = null;
+  let db_message = null;
+  const promise = DbModel.db.transaction().then((p_t) => {
+    t = p_t;
+    return DbModel.Room.find({
+      where: {
+        room: options.room,
+      },
+      transaction: t,
+    });
+  }).then((room) => {
+    if (!room) {
+        throw new Error('Room does not exist.');
     }
-
-    Room.findById(options.room, function(err, room) {
-        if (err) {
-            console.error(err);
-            return cb(err);
-        }
-        if (!room) {
-            return cb('Room does not exist.');
-        }
-        if (room.archived) {
-            return cb('Room is archived.');
-        }
-        if (!room.isAuthorized(options.owner)) {
-            return cb('Not authorized.');
-        }
-
-        Message.create(options, function(err, message) {
-            if (err) {
-                console.error(err);
-                return cb(err);
-            }
-            // Touch Room's lastActive
-            room.lastActive = message.posted;
-            room.save();
-            // Temporary workaround for _id until populate can do aliasing
-            User.findOne(message.owner, function(err, user) {
-                if (err) {
-                    console.error(err);
-                    return cb(err);
-                }
-
-                cb(null, message, room, user);
-                this.core.emit('messages:new', message, room, user, options.data);
-            }.bind(this));
-        }.bind(this));
-    }.bind(this));
+    if (room.archived) {
+        throw new Error('Room is archived.');
+    }
+    if (!room.isAuthorized(options.owner)) {
+        throw new Error('Not authorized.');
+    }
+    db_room = room;
+    return DbModel.Message.create(options, {
+      transaction: t,
+    });
+  }).then((message) => {
+    // Touch Room's lastActive
+    db_room.lastActive = message.posted;
+    return db_room.save();
+  }).then((message) => {
+    db_message = message;
+    return DbModel.User.find({
+      where: {
+        owner: message.owner,
+      },
+      transaction: t,
+    });
+  }).then((user) => {
+    cb(null, db_message, db_room, user);
+    this.core.emit('messages:new', db_message, db_room, user, options.data);
+  }).catch((err) => {
+    console.error(err.message);
+    return cb(err.message);
+  });
+  return promise;
 };
 
 MessageManager.prototype.list = function(options, cb) {
-    var Room = mongoose.model('Room');
+  options = options || {};
 
-    options = options || {};
+  if (!options.room) {
+      return cb(null, []);
+  }
+  options = helpers.sanitizeQuery(options, {
+      defaults: {
+          reverse: true,
+          take: 500
+      },
+      maxTake: 5000
+  });
 
-    if (!options.room) {
+  let where = {
+    room: options.room,
+  };
+  if (options.since_id) {
+    where.id = {
+      $gt:options.since_id
+    };
+  }
+  if (options.from) {
+    where.posted = {
+      $gt:options.from
+    };
+  }
+  if (options.to) {
+    where.posted = {
+      $lte:options.to
+    };
+  }
+  if (options.query) {
+    where.text = {
+      $like: '%' + options.query + '%',
+    };
+  }
+  let message_include = [];
+  if (options.expand) {
+    var includes = options.expand.replace(/\s/, '').split(',');
+
+    if (_.includes(includes, 'owner')) {
+      message_include.push({
+        model: DbModel.Owner,
+        attributes: ['id', 'username', 'displayName', 'email', 'avatar'],
+      });
+    }
+    if (_.includes(includes, 'room')) {
+      message_include.push({
+        model: DbModel.Room,
+        attributes: ['id', 'name'],
+      });
+    }
+  }
+  let offset = 0;
+  let limit = options.take;
+  let order = [];
+  if (options.skip) {
+    offset = options.skip;
+  }
+  if (options.reverse) {
+    order = [['posted', 'DESC']];
+  } else {
+    order = [['posted', 'ASC']];
+  }
+
+  const promise = Promise.resolve().then(() => {
+    return DbModel.Room.find({
+      where: {
+        room: options.room,
+      },
+    });
+  }).then((room) => {
+    var opts = {
+      userId: options.userId,
+      password: options.password
+    };
+    // インデント深くする
+    return room.canJoin(opts)
+    .then((canJoin) => {
+      if (!canJoin) {
         return cb(null, []);
-    }
-
-    options = helpers.sanitizeQuery(options, {
-        defaults: {
-            reverse: true,
-            take: 500
-        },
-        maxTake: 5000
+      }
+    }).then(() => {
+      return DbModel.Message.findAll({
+        where: where,
+        include: message_include,
+        limit: [offset, limit],
+        order: order,
+      });
+    }).then((messages) => {
+      cb(null, messages);
     });
-
-    var Message = mongoose.model('Message');
-
-    var find = Message.find({
-        room: options.room
-    });
-
-    if (options.since_id) {
-        find.where('_id').gt(options.since_id);
-    }
-
-    if (options.from) {
-        find.where('posted').gt(options.from);
-    }
-
-    if (options.to) {
-        find.where('posted').lte(options.to);
-    }
-
-    if (options.query) {
-        find = find.find({$text: {$search: options.query}});
-    }
-
-    if (options.expand) {
-        var includes = options.expand.replace(/\s/, '').split(',');
-
-        if (_.includes(includes, 'owner')) {
-            find.populate('owner', 'id username displayName email avatar');
-        }
-
-        if (_.includes(includes, 'room')) {
-            find.populate('room', 'id name');
-        }
-    }
-
-    if (options.skip) {
-        find.skip(options.skip);
-    }
-
-    if (options.reverse) {
-        find.sort({ 'posted': -1 });
-    } else {
-        find.sort({ 'posted': 1 });
-    }
-
-    Room.findById(options.room, function(err, room) {
-        if (err) {
-            console.error(err);
-            return cb(err);
-        }
-
-        var opts = {
-            userId: options.userId,
-            password: options.password
-        };
-
-        room.canJoin(opts, function(err, canJoin) {
-            if (err) {
-                console.error(err);
-                return cb(err);
-            }
-
-            if (!canJoin) {
-                return cb(null, []);
-            }
-
-            find.limit(options.take)
-                .exec(function(err, messages) {
-                    if (err) {
-                        console.error(err);
-                        return cb(err);
-                    }
-                    cb(null, messages);
-                });
-        });
-    });
+  }).catch((err) => {
+    console.error(err.message);
+    return cb(err.message);
+  });
+  return promise;
 };
 
 module.exports = MessageManager;

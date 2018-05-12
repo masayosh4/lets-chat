@@ -1,8 +1,9 @@
 'use strict';
 
-var mongoose = require('mongoose'),
-    _ = require('lodash'),
+var _ = require('lodash'),
     helpers = require('./helpers');
+
+const DbModel = require('../models/');
 
 var getParticipants = function(room, options, cb) {
     if (!room.private || !options.participants) {
@@ -30,8 +31,18 @@ var getParticipants = function(room, options, cb) {
         .uniq()
         .value();
 
-    var User = mongoose.model('User');
-    User.find({username: { $in: participants } }, cb);
+    const promise = Promise.resolve(() => {
+      return DbModel.User.find({
+        where: {
+          username: {
+            $in: participants,
+          },
+        },
+      });
+    }).then(() => {
+      cb();
+    });
+    return promise;
 };
 
 function RoomManager(options) {
@@ -50,163 +61,156 @@ RoomManager.prototype.canJoin = function(options, cb) {
         if (!room) {
             return cb();
         }
-
-        room.canJoin(options, function(err, canJoin) {
-            cb(err, room, canJoin);
+        return DbModel.Room.canJoin(options)
+        .then((canJoin) => {
+          if (!canJoin) {
+            return cb(null, []);
+          }
+          cb(err, room, canJoin);
         });
     });
 };
 
 RoomManager.prototype.create = function(options, cb) {
-    var Room = mongoose.model('Room');
-    Room.create(options, function(err, room) {
-        if (err) {
-            return cb(err);
-        }
-
-        if (cb) {
-            room = room;
-            cb(null, room);
-            this.core.emit('rooms:new', room);
-        }
-    }.bind(this));
+    return DbModel.Room.create(options)
+    .then((room) => {
+      room = room;
+      cb(null, room);
+      this.core.emit('rooms:new', room);
+    }).catch((err) => {
+      return cb(err);
+    });
 };
 
 RoomManager.prototype.update = function(roomId, options, cb) {
-    var Room = mongoose.model('Room');
-
-    Room.findById(roomId, function(err, room) {
-        if (err) {
-            // Oh noes, a bad thing happened!
-            console.error(err);
-            return cb(err);
-        }
-
+    const promise =  DbModel.Room.find({
+      where: {
+        room: roomId,
+      }
+    }).then((room) => {
         if (!room) {
-            return cb('Room does not exist.');
+          throw new Error('Room does not exist.');
         }
-
         if(room.private && !room.owner.equals(options.user.id)) {
-            return cb('Only owner can change private room.');
+          throw new Error('Only owner can change private room.');
         }
-
-        getParticipants(room, options, function(err, participants) {
+        return new Promise((resolve) => {
+          return getParticipants(room, options, function(err, participants) {
             if (err) {
-                // Oh noes, a bad thing happened!
-                console.error(err);
-                return cb(err);
+              // Oh noes, a bad thing happened!
+              console.error(err);
+              return new Error(err);
             }
+            resolve([participants, room]);
+          });
+        });
+    }).then((result) => {
+      let participants = result[0];
+      let room = result[1];
+      room.name = options.name;
+      // DO NOT UPDATE SLUG
+      // room.slug = options.slug;
+      room.description = options.description;
 
-            room.name = options.name;
-            // DO NOT UPDATE SLUG
-            // room.slug = options.slug;
-            room.description = options.description;
-
-            if (room.private) {
-                room.password = options.password;
-                room.participants = participants;
-            }
-
-            room.save(function(err, room) {
-                if (err) {
-                    console.error(err);
-                    return cb(err);
-                }
-                room = room;
-                cb(null, room);
-                this.core.emit('rooms:update', room);
-            }.bind(this));
-        }.bind(this));
-    }.bind(this));
+      if (room.private) {
+          room.password = options.password;
+          room.participants = participants;
+      }
+      
+      return room.save()
+      .then(() => {
+        return room;
+      });
+    }).then((room) => {
+      room = room;
+      cb(null, room);
+      this.core.emit('rooms:update', room);
+    }).catch((err) => {
+      return cb(err);
+    });
+    return promise;
 };
 
 RoomManager.prototype.archive = function(roomId, cb) {
-    var Room = mongoose.model('Room');
-
-    Room.findById(roomId, function(err, room) {
-        if (err) {
-            // Oh noes, a bad thing happened!
-            console.error(err);
-            return cb(err);
+    const promise = Promise.resolve(() => {
+      return DbModel.Room.find({
+        where: {
+          id: roomId,
         }
-
-        if (!room) {
-            return cb('Room does not exist.');
-        }
-
-        room.archived = true;
-        room.save(function(err, room) {
-            if (err) {
-                console.error(err);
-                return cb(err);
-            }
-            cb(null, room);
-            this.core.emit('rooms:archive', room);
-
-        }.bind(this));
-    }.bind(this));
+      });
+    }).then((room) => {
+      if (!room) {
+        throw new Error('Room does not exist.');
+      }
+      room.archived = true;
+      return room.save()
+      .then(() => {
+        return room;
+      });
+    }).then((room) => {
+      cb(null, room);
+      this.core.emit('rooms:archive', room);
+    }).catch((err) => {
+      return cb(err);
+    });
+    return promise;
 };
 
 RoomManager.prototype.list = function(options, cb) {
-    options = options || {};
+  options = options || {};
 
-    options = helpers.sanitizeQuery(options, {
-        defaults: {
-            take: 500
-        },
-        maxTake: 5000
-    });
+  options = helpers.sanitizeQuery(options, {
+      defaults: {
+          take: 500
+      },
+      maxTake: 5000
+  });
+  let where = {
+    archived: {
+      $ne: true,
+    },
+    $or: [
+      {private: false},
+      {owner: options.userId},
+      {participants: options.userId},
+      {password: {
+        $ne: ''
+      }}
+    ]
+  };
+  let offset = 0;
+  let limit = options.take;
+  let order = [];
+  if (options.skip) {
+    offset = options.skip;
+  }
+  if (options.sort) {
+    //var sort = options.sort.replace(',', ' ');
+    order = [['posted', 'ASC']];
+  } else {
+    order = [['lastActive', 'DESC']];
+  }
+  let room_include = [];
+  room_include.push({
+    model: DbModel.Participants,
+  });
 
-    var Room = mongoose.model('Room');
-
-    var find = Room.find({
-        archived: { $ne: true },
-        $or: [
-            {private: {$exists: false}},
-            {private: false},
-
-            {owner: options.userId},
-
-            {participants: options.userId},
-
-            {password: {$exists: true, $ne: ''}}
-        ]
-    });
-
-    if (options.skip) {
-        find.skip(options.skip);
-    }
-
-    if (options.take) {
-        find.limit(options.take);
-    }
-
-    if (options.sort) {
-        var sort = options.sort.replace(',', ' ');
-        find.sort(sort);
-    } else {
-        find.sort('-lastActive');
-    }
-
-    find.populate('participants');
-
-    find.exec(function(err, rooms) {
-        if (err) {
-            return cb(err);
-        }
-
-        _.each(rooms, function(room) {
-            this.sanitizeRoom(options, room);
-        }.bind(this));
-
-        if (options.users && !options.sort) {
-            rooms = _.sortBy(rooms, ['userCount', 'lastActive'])
-                     .reverse();
-        }
-
-        cb(null, rooms);
-
+  return DbModel.Room.findAll({
+    where: where,
+    includes: room_include,
+    limit: [offset, limit],
+    order: order,
+  }).then((rooms) => {
+    _.each(rooms, function(room) {
+        this.sanitizeRoom(options, room);
     }.bind(this));
+  
+    if (options.users && !options.sort) {
+        rooms = _.sortBy(rooms, ['userCount', 'lastActive'])
+                 .reverse();
+    }
+    cb(null, rooms);
+  });
 };
 
 RoomManager.prototype.sanitizeRoom = function(options, room) {
@@ -223,18 +227,17 @@ RoomManager.prototype.sanitizeRoom = function(options, room) {
 };
 
 RoomManager.prototype.findOne = function(options, cb) {
-    var Room = mongoose.model('Room');
-    Room.findOne(options.criteria)
-        .populate('participants').exec(function(err, room) {
-
-        if (err) {
-            return cb(err);
-        }
-
-        this.sanitizeRoom(options, room);
-        cb(err, room);
-
-    }.bind(this));
+  return DbModel.Room.find({
+    include: [{
+      model: this.Participants,
+    }],
+    where: options.criteria
+  }).then((room) => {
+    this.sanitizeRoom(options, room);
+    cb(null, room);
+  }).catch((err) => {
+    return cb(err);
+  });
 };
 
 RoomManager.prototype.get = function(options, cb) {

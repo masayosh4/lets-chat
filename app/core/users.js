@@ -1,47 +1,52 @@
 'use strict';
 
-var mongoose = require('mongoose'),
-    helpers = require('./helpers');
+var helpers = require('./helpers');
+const DbModel = require('../models/');
 
 function UserManager(options) {
     this.core = options.core;
 }
 
 UserManager.prototype.list = function(options, cb) {
-    options = options || {};
+  options = options || {};
 
-    options = helpers.sanitizeQuery(options, {
-        defaults: {
-            take: 500
-        },
-        maxTake: 5000
-    });
+  options = helpers.sanitizeQuery(options, {
+    defaults: {
+      take: 500
+    },
+    maxTake: 5000
+  });
 
-    var User = mongoose.model('User');
-
-    var find = User.find();
-
-    if (options.skip) {
-        find.skip(options.skip);
-    }
-
-    if (options.take) {
-        find.limit(options.take);
-    }
-
-    find.exec(cb);
+  let offset = 0;
+  let limit = options.take;
+  if (options.skip) {
+    offset = options.skip;
+  }
+  return DbModel.User.findAll({
+    limit: [offset, limit],
+  }).then((users) => {
+    cb(null, users);
+  });
 };
 
 UserManager.prototype.get = function(identifier, cb) {
-    var User = mongoose.model('User');
-    User.findById(identifier, cb);
+  return DbModel.User.find({
+    where: {
+      id: identifier,
+    }
+  }).then((user) => {
+    cb(null, user);
+  });
 };
 
 UserManager.prototype.username = function(username, cb) {
-    var User = mongoose.model('User');
-    User.findOne({
-        username: username
-    }, cb);
+  return DbModel.User.find({
+    where: {
+      username: username,
+    }
+  }).then((user) => {
+    cb(null, user);
+  });
 };
 
 module.exports = UserManager;

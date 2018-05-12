@@ -1,12 +1,12 @@
 'use strict';
 
 var _ = require('lodash'),
-    mongoose = require('mongoose'),
     helpers = require('./helpers'),
     plugins = require('./../plugins'),
     settings = require('./../config').files;
 
 var enabled = settings.enable;
+const DbModel = require('../models/');
 
 function FileManager(options) {
     this.core = options.core;
@@ -27,164 +27,169 @@ function FileManager(options) {
 }
 
 FileManager.prototype.create = function(options, cb) {
-    if (!enabled) {
-        return cb('Files are disabled.');
+  if (!enabled) {
+      return cb('Files are disabled.');
+  }
+
+  if (settings.restrictTypes &&
+      settings.allowedTypes &&
+      settings.allowedTypes.length &&
+      !_.includes(settings.allowedTypes, options.file.mimetype)) {
+          return cb('The MIME type ' + options.file.mimetype +
+                    ' is not allowed');
+  }
+  let db_room = null;
+  let db_savedFile = null;
+  const promise = Promise.resolve().then(() => {
+    return DbModel.Room.find({
+      where: {
+        room: options.room,
+      },
+    });
+  }).then((room) => {
+    db_room = room;
+    if (!room) {
+      throw new Error('Room does not exist.');
     }
-
-    var File = mongoose.model('File'),
-        Room = mongoose.model('Room'),
-        User = mongoose.model('User');
-
-    if (settings.restrictTypes &&
-        settings.allowedTypes &&
-        settings.allowedTypes.length &&
-        !_.includes(settings.allowedTypes, options.file.mimetype)) {
-            return cb('The MIME type ' + options.file.mimetype +
-                      ' is not allowed');
+    if (room.archived) {
+      throw new Error('Room is archived.');
     }
-
-    Room.findById(options.room, function(err, room) {
-
+    if (!room.isAuthorized(options.owner)) {
+      throw new Error('Not authorized.');
+    }
+    return new Promise((resolve, reject) => {
+      new File({
+        owner: options.owner,
+        name: options.file.originalname,
+        type: options.file.mimetype,
+        size: options.file.size,
+        room: options.room
+      }).save((err, savedFile) => {
         if (err) {
-            console.error(err);
-            return cb(err);
+          return reject(err);
         }
-        if (!room) {
-            return cb('Room does not exist.');
+        resolve(savedFile);
+      });
+    });
+  }).then((savedFile) => {
+    db_savedFile = savedFile;
+    return new Promise((resolve,reject) => {
+      this.provider.save({file: options.file, doc: savedFile}, (err) => {
+        if (err) {
+          savedFile.remove();
+          return reject(err);
         }
-        if (room.archived) {
-            return cb('Room is archived.');
-        }
-        if (!room.isAuthorized(options.owner)) {
-            return cb('Not authorized.');
-        }
-
-        new File({
-            owner: options.owner,
-            name: options.file.originalname,
-            type: options.file.mimetype,
-            size: options.file.size,
-            room: options.room
-        }).save(function(err, savedFile) {
-            if (err) {
-                return cb(err);
-            }
-
-            this.provider.save({file: options.file, doc: savedFile}, function(err) {
-                if (err) {
-                    savedFile.remove();
-                    return cb(err);
-                }
-
-                // Temporary workaround for _id until populate can do aliasing
-                User.findOne(options.owner, function(err, user) {
-                    if (err) {
-                        console.error(err);
-                        return cb(err);
-                    }
-
-                    cb(null, savedFile, room, user);
-
-                    this.core.emit('files:new', savedFile, room, user);
-
-                    if (options.post) {
-                        this.core.messages.create({
-                            room: room,
-                            owner: user.id,
-                            text: 'upload://' + savedFile.url
-                        });
-                    }
-                }.bind(this));
-            }.bind(this));
-        }.bind(this));
-    }.bind(this));
+        resolve();
+      });
+    });
+  }).then(() => {
+    // Temporary workaround for _id until populate can do aliasing
+    return DbModel.User.find({
+      where: {
+        id: options.owner,
+      },
+    });
+  }).then((user) => {
+    cb(null, db_savedFile, db_room, user);
+    this.core.emit('files:new', db_savedFile, db_room, user);
+    if (options.post) {
+      this.core.messages.create({
+        room: db_room,
+        owner: user.id,
+        text: 'upload://' + db_savedFile.url
+      });
+    }
+  }).catch((err) => {
+    console.error(err.message);
+    return cb(err.message);
+  });
+  return promise;
 };
 
 FileManager.prototype.list = function(options, cb) {
-    var Room = mongoose.model('Room');
+  if (!enabled) {
+      return cb(null, []);
+  }
 
-    if (!enabled) {
+  options = options || {};
+
+  if (!options.room) {
+      return cb(null, []);
+  }
+
+  options = helpers.sanitizeQuery(options, {
+      defaults: {
+          reverse: true,
+          take: 500
+      },
+      maxTake: 5000
+  });
+
+  let where = {
+    room: options.room
+  };
+  if (options.from) {
+    where.uploaded = where.uploaded || {};
+    where.uploaded.$gt = options.from;
+  }
+  if (options.to) {
+    where.uploaded = where.uploaded || {};
+    where.uploaded.$lt = options.to;
+  }
+
+  let file_include = [];
+  if (options.expand) {
+    var includes = options.expand.replace(/\s/, '').split(',');
+    if (_.includes(includes, 'owner')) {
+      file_include.push({
+        model: DbModel.Owner,
+        attributes: ['id', 'username', 'displayName', 'email', 'avatar'],
+      });
+    }
+  }
+  let offset = 0;
+  if (options.skip) {
+    offset = options.skip;
+  }
+  let limit = options.take;
+  let order = null;
+  if (options.reverse) {
+    order = ['uploaded', 'DESC'];
+  } else {
+    order = ['uploaded', 'ASC'];
+  }
+
+  const promise = Promise.resolve().then(() => {
+    return DbModel.Room.find({
+      where: {
+        room: options.room,
+      }
+    });
+  }).then((room) => {
+    var opts = {
+      userId: options.userId,
+      password: options.password
+    };
+    return room.canJoin(opts)
+    .then((canJoin) => {
+      if (!canJoin) {
         return cb(null, []);
-    }
-
-    options = options || {};
-
-    if (!options.room) {
-        return cb(null, []);
-    }
-
-    options = helpers.sanitizeQuery(options, {
-        defaults: {
-            reverse: true,
-            take: 500
-        },
-        maxTake: 5000
+      }
+    }).then(() => {
+      return DbModel.File.findAll({
+        where: where,
+        includes: file_include,
+        limit: [offset, limit],
+        order: order,
+      }).then((files) => {
+        cb(null, files);
+      });
     });
-
-    var File = mongoose.model('File');
-
-    var find = File.find({
-        room: options.room
-    });
-
-    if (options.from) {
-        find.where('uploaded').gt(options.from);
-    }
-
-    if (options.to) {
-        find.where('uploaded').lte(options.to);
-    }
-
-    if (options.expand) {
-        var includes = options.expand.replace(/\s/, '').split(',');
-
-        if (_.includes(includes, 'owner')) {
-            find.populate('owner', 'id username displayName email avatar');
-        }
-    }
-
-    if (options.skip) {
-        find.skip(options.skip);
-    }
-
-    if (options.reverse) {
-        find.sort({ 'uploaded': -1 });
-    } else {
-        find.sort({ 'uploaded': 1 });
-    }
-
-    Room.findById(options.room, function(err, room) {
-        if (err) {
-            console.error(err);
-            return cb(err);
-        }
-
-        var opts = {
-            userId: options.userId,
-            password: options.password
-        };
-
-        room.canJoin(opts, function(err, canJoin) {
-            if (err) {
-                console.error(err);
-                return cb(err);
-            }
-
-            if (!canJoin) {
-                return cb(null, []);
-            }
-
-            find
-                .limit(options.take)
-                .exec(function(err, files) {
-                    if (err) {
-                        console.error(err);
-                        return cb(err);
-                    }
-                    cb(null, files);
-                });
-        });
-    });
+  }).catch((err) => {
+    console.error(err.message);
+    return cb(err.message);
+  });
+  return promise;
 };
 
 FileManager.prototype.getUrl = function(file) {
