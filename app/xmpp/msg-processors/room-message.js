@@ -36,7 +36,7 @@ module.exports = MessageProcessor.extend({
             var text = body.text().replace(mentionPattern, function(group) {
 
                 var usernames = this.core.presence.rooms
-                                    .get(room._id).getUsernames();
+                                    .get(room.id).getUsernames();
 
                 var username = group.substring(0, group.length - 1);
 
@@ -50,8 +50,8 @@ module.exports = MessageProcessor.extend({
 
 
             var options = {
-                owner: this.client.user._id,
-                room: room._id,
+                owner: this.client.user.id,
+                room: room.id,
                 text: text,
                 data: {
                     id: this.request.attrs.id

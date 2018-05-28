@@ -1,8 +1,8 @@
 'use strict';
 
-var mongoose = require('mongoose'),
-    passport = require('passport'),
+var passport = require('passport'),
     LocalStrategy = require('passport-local').Strategy;
+const DbModel = require('../models/');
 
 function Local(options) {
     this.options = options;
@@ -12,12 +12,13 @@ function Local(options) {
 Local.key = 'local';
 
 Local.prototype.setup = function() {
+console.log('Local.prototype.setup');
     passport.use(new LocalStrategy({
         usernameField: 'username',
         passwordField: 'password'
     }, function(identifier, password, done) {
-        var User = mongoose.model('User');
-        User.authenticate(identifier, password, function(err, user) {
+console.log('Local.prototype.setup2', identifier, password);
+        DbModel.User.authenticate(identifier, password, function(err, user) {
             if (err) {
                 return done(null, false, {
                     message: 'Some fields did not validate.'
@@ -35,6 +36,7 @@ Local.prototype.setup = function() {
 };
 
 Local.prototype.authenticate = function(req, cb) {
+console.log('Local.prototype.authenticate');
     passport.authenticate('local', cb)(req);
 };
 

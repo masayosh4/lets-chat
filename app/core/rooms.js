@@ -50,6 +50,7 @@ function RoomManager(options) {
 }
 
 RoomManager.prototype.canJoin = function(options, cb) {
+console.log('RoomManager.prototype.canJoin', options);
     var method = options.id ? 'get' : 'slug',
         roomId = options.id ? options.id : options.slug;
 
@@ -61,8 +62,7 @@ RoomManager.prototype.canJoin = function(options, cb) {
         if (!room) {
             return cb();
         }
-        return DbModel.Room.canJoin(options)
-        .then((canJoin) => {
+        return room.canJoin(options, (err, canJoin) => {
           if (!canJoin) {
             return cb(null, []);
           }
@@ -72,9 +72,9 @@ RoomManager.prototype.canJoin = function(options, cb) {
 };
 
 RoomManager.prototype.create = function(options, cb) {
+console.log('RoomManager.prototype.create', options);
     return DbModel.Room.create(options)
     .then((room) => {
-      room = room;
       cb(null, room);
       this.core.emit('rooms:new', room);
     }).catch((err) => {
@@ -83,6 +83,7 @@ RoomManager.prototype.create = function(options, cb) {
 };
 
 RoomManager.prototype.update = function(roomId, options, cb) {
+console.log('RoomManager.prototype.update');
     const promise =  DbModel.Room.find({
       where: {
         room: roomId,
@@ -132,6 +133,7 @@ RoomManager.prototype.update = function(roomId, options, cb) {
 };
 
 RoomManager.prototype.archive = function(roomId, cb) {
+console.log('RoomManager.prototype.archive');
     const promise = Promise.resolve(() => {
       return DbModel.Room.find({
         where: {
@@ -157,6 +159,7 @@ RoomManager.prototype.archive = function(roomId, cb) {
 };
 
 RoomManager.prototype.list = function(options, cb) {
+console.log('RoomManager.prototype.list:', options);
   options = options || {};
 
   options = helpers.sanitizeQuery(options, {
@@ -171,8 +174,8 @@ RoomManager.prototype.list = function(options, cb) {
     },
     $or: [
       {private: false},
-      {owner: options.userId},
-      {participants: options.userId},
+      {owner_id: options.userId},
+//      {participants: options.userId},
       {password: {
         $ne: ''
       }}
@@ -192,12 +195,17 @@ RoomManager.prototype.list = function(options, cb) {
   }
   let room_include = [];
   room_include.push({
-    model: DbModel.Participants,
+    model: DbModel.User,
+    as: 'owner',
+  });
+  room_include.push({
+    model: DbModel.User,
+    as: 'participants',
   });
 
   return DbModel.Room.findAll({
     where: where,
-    includes: room_include,
+    include: room_include,
     limit: [offset, limit],
     order: order,
   }).then((rooms) => {
@@ -214,6 +222,7 @@ RoomManager.prototype.list = function(options, cb) {
 };
 
 RoomManager.prototype.sanitizeRoom = function(options, room) {
+console.log('RoomManager.prototype.sanitizeRoom');
     var authorized = options.userId && room.isAuthorized(options.userId);
 
     if (options.users) {
@@ -227,11 +236,16 @@ RoomManager.prototype.sanitizeRoom = function(options, room) {
 };
 
 RoomManager.prototype.findOne = function(options, cb) {
+console.log('RoomManager.prototype.findOne:', options);
   return DbModel.Room.find({
     include: [{
-      model: this.Participants,
+      model: DbModel.User,
+      as: 'owner',
+    }, {
+      model: DbModel.User,
+      as: 'participants',
     }],
-    where: options.criteria
+    where: options.criteria,
   }).then((room) => {
     this.sanitizeRoom(options, room);
     cb(null, room);
@@ -241,9 +255,11 @@ RoomManager.prototype.findOne = function(options, cb) {
 };
 
 RoomManager.prototype.get = function(options, cb) {
+console.log('RoomManager.prototype.get');
     var identifier;
 
-    if (typeof options === 'string') {
+    if (options !== Object(options)) {
+        // オブジェクト以外
         identifier = options;
         options = {};
         options.identifier = identifier;
@@ -252,7 +268,7 @@ RoomManager.prototype.get = function(options, cb) {
     }
 
     options.criteria = {
-        _id: identifier,
+        id: identifier,
         archived: { $ne: true }
     };
 
@@ -260,6 +276,7 @@ RoomManager.prototype.get = function(options, cb) {
 };
 
 RoomManager.prototype.slug = function(options, cb) {
+console.log('RoomManager.prototype.slug');
     var identifier;
 
     if (typeof options === 'string') {

@@ -24,7 +24,7 @@ module.exports = function(req, res, next) {
             return res.sendStatus(404);
         }
 
-        var roomId = room._id.toString();
+        var roomId = room.id.toString();
 
         req.params.room = roomId;
         req.body.room = roomId;

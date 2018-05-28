@@ -44,7 +44,7 @@ UserMessageManager.prototype.create = function(options, cb) {
     var message = DbModel.UserMessage.build(data);
     // Test if this message is OTR
     if (data.text.match(/^\?OTR/)) {
-      message._id = 'OTR';
+      message.id = 'OTR';
       this.onMessageCreated(message, user, options, cb);
     } else {
       return message.save().then(() => {

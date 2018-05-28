@@ -7,6 +7,9 @@
 process.title = 'letschat';
 
 require('colors');
+const mongoose = require('mongoose');
+const DbModel = require('./app/models');
+DbModel.syncAll();
 
 var _ = require('lodash'),
     path = require('path'),
@@ -19,7 +22,6 @@ var _ = require('lodash'),
     helmet = require('helmet'),
     http = require('http'),
     nunjucks = require('nunjucks'),
-    mongoose = require('mongoose'),
     connectMongo = require('connect-mongo/es5'),
     all = require('require-tree'),
     psjon = require('./package.json'),
@@ -52,6 +54,7 @@ if (settings.env === 'production') {
     app.set('env', settings.env);
     app.set('json spaces', undefined);
     app.enable('view cache');
+
 }
 
 // Session

@@ -11,13 +11,13 @@ function LocalFiles(options) {
 }
 
 LocalFiles.prototype.getUrl = function(file) {
-    return path.resolve(this.options.dir + '/' + file._id);
+    return path.resolve(this.options.dir + '/' + file.id);
 };
 
 LocalFiles.prototype.save = function(options, callback) {
     var file = options.file,
         doc = options.doc,
-        fileFolder = doc._id,
+        fileFolder = doc.id,
         filePath = fileFolder + '/' + encodeURIComponent(doc.name),
         newPath = this.options.dir + '/' + fileFolder;
 

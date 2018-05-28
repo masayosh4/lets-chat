@@ -7,16 +7,20 @@ function AccountManager(options) {
 }
 
 AccountManager.prototype.create = function(provider, options, cb) {
+console.log('AccountManager.prototype.create');
   let user = DbModel.User.build({provider: provider});
   Object.keys(options).forEach(function(key) {
     user[key] = options[key];
   });
-  return user.save(cb).then(() => {
-    cb();
+  return user.setPassword(() => {
+    user.save().then(() => {
+      cb();
+    });
   });
 };
 
 AccountManager.prototype.update = function(id, options, cb) {
+console.log('AccountManager.prototype.update');
   let usernameChange = false;
   let user = null;
   const promise = DbModel.User.find({
@@ -41,7 +45,7 @@ AccountManager.prototype.update = function(id, options, cb) {
     }
     if (options.username && options.username !== user.username) {
       var xmppConns = this.core.presence.system.connections.query({
-        userId: user._id,
+        userId: user.id,
         type: 'xmpp'
       });
       if (xmppConns.length) {
@@ -69,6 +73,7 @@ AccountManager.prototype.update = function(id, options, cb) {
 };
 
 AccountManager.prototype.generateToken = function(id, cb) {
+console.log('AccountManager.prototype.generateToken');
   let ret = null;
   const promise = DbModel.User.find({
     where: {
@@ -90,6 +95,7 @@ AccountManager.prototype.generateToken = function(id, cb) {
 };
 
 AccountManager.prototype.revokeToken = function(id, cb) {
+console.log('AccountManager.prototype.revokeToken');
   const promise = DbModel.User.find({
     where: {
       id: id,

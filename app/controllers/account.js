@@ -94,7 +94,7 @@ module.exports = function() {
                     openRooms: form.openRooms,
                 };
 
-            core.account.update(req.user._id, data, function (err, user) {
+            core.account.update(req.user.id, data, function (err, user) {
                 if (err) {
                     return res.json({
                         status: 'error',
@@ -147,7 +147,7 @@ module.exports = function() {
                     });
                 }
 
-                core.account.update(req.user._id, data, function (err, user, reason) {
+                core.account.update(req.user.id, data, function (err, user, reason) {
                     if (err || !user) {
                         return res.status(400).json({
                             status: 'error',
@@ -169,7 +169,7 @@ module.exports = function() {
                 });
             }
 
-            core.account.generateToken(req.user._id, function (err, token) {
+            core.account.generateToken(req.user.id, function (err, token) {
                 if (err) {
                     return res.json({
                         status: 'error',
@@ -194,7 +194,7 @@ module.exports = function() {
                 });
             }
 
-            core.account.revokeToken(req.user._id, function (err) {
+            core.account.revokeToken(req.user.id, function (err) {
                 if (err) {
                     return res.json({
                         status: 'error',

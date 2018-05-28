@@ -28,6 +28,7 @@ module.exports = function() {
     //
     app.io.route('users', {
         list: function(req, res) {
++console.log(__filename, 'list');
             var options = {
                     skip: req.param('skip'),
                     take: req.param('take')
@@ -43,6 +44,7 @@ module.exports = function() {
             });
         },
         get: function(req, res) {
++console.log(__filename, 'get');
             var identifier = req.param('id');
 
             User.findByIdentifier(identifier, function (err, user) {

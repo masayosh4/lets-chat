@@ -10,7 +10,7 @@ module.exports = EventListener.extend({
     on: 'messages:new',
 
     then: function(msg, room, user, data) {
-        var connections = this.getConnectionsForRoom(room._id);
+        var connections = this.getConnectionsForRoom(room.id);
 
         connections.forEach(function(connection) {
             var text = msg.text;
@@ -21,7 +21,7 @@ module.exports = EventListener.extend({
                 text = connection.nickname(room.slug) + ': ' + text;
             }
 
-            var id = msg._id;
+            var id = msg.id;
             if (connection.user.username === user.username) {
                 id = data && data.id || id;
             }

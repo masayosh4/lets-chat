@@ -14,12 +14,12 @@ module.exports = EventListener.extend({
         }
 
         var connections = this.core.presence.system.connections.query({
-            userId: user._id.toString(),
+            userId: user.id.toString(),
             type: 'xmpp'
         });
 
         connections.forEach(function(connection) {
-            var id = msg._id;
+            var id = msg.id;
             if (connection.user.username === user.username) {
                 id = data && data.id || id;
             }

@@ -3,7 +3,6 @@
 var _ = require('lodash'),
     async = require('async'),
     cookieParser = require('cookie-parser'),
-    mongoose = require('mongoose'),
     passport = require('passport'),
     passportSocketIo = require('passport.socketio'),
     BearerStrategy = require('passport-http-bearer'),
@@ -15,6 +14,7 @@ var providerSettings = {},
     MAX_AUTH_DELAY_TIME = 24 * 60 * 60 * 1000,
     loginAttempts = {},
     enabledProviders = [];
+const DbModel = require('../models/');
 
 function getProviders(core) {
     return settings.auth.providers.map(function(key) {
@@ -47,8 +47,7 @@ function setup(app, session, core) {
             done = password;
         }
 
-        var User = mongoose.model('User');
-        User.findByToken(username, function(err, user) {
+        DbModel.User.findByToken(username, function(err, user) {
             if (err) { return done(err); }
             if (!user) { return done(null, false); }
             return done(null, user);
@@ -59,13 +58,16 @@ function setup(app, session, core) {
     passport.use(new BasicStrategy(tokenAuth));
 
     passport.serializeUser(function(user, done) {
-        done(null, user._id);
+        done(null, user.id);
     });
 
     passport.deserializeUser(function(id, done) {
-        var User = mongoose.model('User');
-        User.findOne({ _id: id }, function(err, user) {
-            done(err, user);
+        DbModel.User.find({
+          id: id,
+        }).then((user) => {
+          done(null, user);
+        }).catch((err) => {
+          done(err);
         });
     });
 
@@ -80,9 +82,8 @@ function setup(app, session, core) {
     var psiAuth = passportSocketIo.authorize(session);
 
     app.io.use(function (socket, next) {
-        var User = mongoose.model('User');
         if (socket.request._query && socket.request._query.token) {
-            User.findByToken(socket.request._query.token, function(err, user) {
+            DbModel.User.findByToken(socket.request._query.token, function(err, user) {
                 if (err || !user) {
                     return next('Fail');
                 }
@@ -145,6 +146,7 @@ function wrapAuthCallback(username, cb) {
 }
 
 function authenticate() {
+console.log('authenticate');
     var req, username, cb;
 
     if (arguments.length === 4) {
@@ -184,6 +186,7 @@ function authenticate() {
     }
 
     checkIfAccountLocked(username, function(locked) {
+console.log('checkIfAccountLocked locked:', locked);
         if (locked) {
             return cb(null, null, {
                 locked: true,

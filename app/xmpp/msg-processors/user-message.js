@@ -39,7 +39,7 @@ module.exports = MessageProcessor.extend({
 
             this.core.usermessages.create({
                 owner: this.connection.user.id,
-                user: user._id,
+                user: user.id,
                 text: body.text(),
                 data: {
                     id: this.request.attrs.id

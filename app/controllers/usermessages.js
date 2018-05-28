@@ -49,7 +49,7 @@ module.exports = function() {
     app.io.route('user-messages', {
         create: function(req, res) {
             var options = {
-                    owner: req.user._id,
+                    owner: req.user.id,
                     user: req.param('user'),
                     text: req.param('text')
                 };
@@ -63,7 +63,7 @@ module.exports = function() {
         },
         list: function(req, res) {
             var options = {
-                    currentUser: req.user._id,
+                    currentUser: req.user.id,
                     user: req.param('user'),
                     since_id: req.param('since_id'),
                     from: req.param('from'),

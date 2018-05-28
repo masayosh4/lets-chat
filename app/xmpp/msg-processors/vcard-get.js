@@ -50,7 +50,7 @@ module.exports = MessageProcessor.extend({
 
         vcard.c('JABBERID').t(this.connection.getUserJid(user.username));
 
-        var userId = (user.id || user._id).toString();
+        var userId = (user.id || user.id).toString();
 
         var avatar = this.core.avatars.get(userId);
         if (avatar) {

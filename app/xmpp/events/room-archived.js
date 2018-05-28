@@ -8,7 +8,7 @@ module.exports = EventListener.extend({
     on: 'rooms:archived',
 
     then: function(room) {
-        var connections = this.getConnectionsForRoom(room._id);
+        var connections = this.getConnectionsForRoom(room.id);
 
         connections.forEach(function(connection) {
             // Kick connection from room!

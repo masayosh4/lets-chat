@@ -2,6 +2,7 @@
 
 var util = require('util'),
     Connection = require('./../core/presence').Connection;
+const DbModel = require('../models');
 
 function SocketIoConnection(user, socket) {
     Connection.call(this, 'socket.io', user);
@@ -21,12 +22,11 @@ SocketIoConnection.prototype.disconnect = function() {
 
 module.exports = function() {
     var app = this.app,
-        core = this.core,
-        User = this.models.user;
+        core = this.core;
 
     app.io.on('connection', function(socket) {
-        var userId = socket.request.user._id;
-        User.findById(userId, function (err, user) {
+        var userId = socket.request.user.id;
+        DbModel.User.findById(userId, function (err, user) {
             if (err) {
                 console.error(err);
                 return;

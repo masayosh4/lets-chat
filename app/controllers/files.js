@@ -23,7 +23,7 @@ module.exports = function() {
         fil.owner = user;
         fil.room = room.toJSON(user);
 
-        app.io.to(room._id)
+        app.io.to(room.id)
               .emit('files:new', fil);
     });
 
@@ -101,7 +101,7 @@ module.exports = function() {
             }
 
             var options = {
-                    owner: req.user._id,
+                    owner: req.user.id,
                     room: req.param('room'),
                     file: req.files[0],
                     post: (req.param('post') === 'true') && true
@@ -117,7 +117,7 @@ module.exports = function() {
         },
         list: function(req, res) {
             var options = {
-                    userId: req.user._id,
+                    userId: req.user.id,
                     password: req.param('password'),
 
                     room: req.param('room'),

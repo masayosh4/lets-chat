@@ -30,7 +30,7 @@ RoomCollection.prototype.slug = function(slug) {
 };
 
 RoomCollection.prototype.getOrAdd = function(room) {
-    var roomId = room._id.toString();
+    var roomId = room.id.toString();
     var pRoom = this.rooms[roomId];
     if (!pRoom) {
         pRoom = this.rooms[roomId] = new Room({

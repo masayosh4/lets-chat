@@ -16,7 +16,7 @@ function Room(options) {
         this.hasPassword = false;
     } else {
         this.system = false;
-        this.roomId = options.room._id.toString();
+        this.roomId = options.room.id.toString();
         this.roomSlug = options.room.slug;
         this.hasPassword = options.room.hasPassword;
     }

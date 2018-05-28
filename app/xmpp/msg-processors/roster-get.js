@@ -48,7 +48,7 @@ module.exports = MessageProcessor.extend({
         });
 
         _.each(users, function(user) {
-            if (user._id && user._id.equals(this.connection.user.id)) {
+            if (user.id && user.id.equals(this.connection.user.id)) {
                 return;
             }
             if (user.id && user.id === this.connection.user.id) {

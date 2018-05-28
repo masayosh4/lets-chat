@@ -167,7 +167,7 @@ module.exports = MessageProcessor.extend({
     handleJoin: function(room, cb) {
         var username = this.connection.user.username;
 
-        var proom = this.core.presence.rooms.get(room._id);
+        var proom = this.core.presence.rooms.get(room.id);
         var usernames = proom ? proom.getUsernames() : [];
 
         // User's own presence must be last - and be their nickname
@@ -218,7 +218,7 @@ module.exports = MessageProcessor.extend({
 
         var query = {
             userId: this.connection.user.id,
-            room: room._id,
+            room: room.id,
             expand: 'owner'
         };
 
@@ -247,7 +247,7 @@ module.exports = MessageProcessor.extend({
             var msgs = messages.map(function(msg) {
 
                 var stanza = new Message({
-                    id: msg._id,
+                    id: msg.id,
                     type: 'groupchat',
                     to: this.connection.getRoomJid(room.slug),
                     from: this.connection.getRoomJid(room.slug, msg.owner.username)

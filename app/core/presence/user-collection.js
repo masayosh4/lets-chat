@@ -27,6 +27,7 @@ UserCollection.prototype.getByUsername = function(username) {
 };
 
 UserCollection.prototype.getOrAdd = function(user) {
+console.log('UserCollection.prototype.getOrAdd');
     var user2 = typeof user.toJSON === 'function' ? user.toJSON() : user;
     var userId = user2.id.toString();
     if (!this.users[userId]) {

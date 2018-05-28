@@ -120,8 +120,9 @@ module.exports = function() {
     //
     app.io.route('rooms', {
         list: function(req, res) {
+console.log(__filename, 'list');
             var options = {
-                    userId: req.user._id,
+                    userId: req.user.id,
                     users: req.param('users'),
 
                     skip: req.param('skip'),
@@ -138,12 +139,14 @@ module.exports = function() {
                     return room.toJSON(req.user);
                 });
 
+console.log(results);
                 res.json(results);
             });
         },
         get: function(req, res) {
+console.log(__filename, 'get');
             var options = {
-                userId: req.user._id,
+                userId: req.user.id,
                 identifier: req.param('room') || req.param('id')
             };
 
@@ -157,12 +160,14 @@ module.exports = function() {
                     return res.sendStatus(404);
                 }
 
+console.log(room.toJSON(req.user));
                 res.json(room.toJSON(req.user));
             });
         },
         create: function(req, res) {
+console.log(__filename, 'create');
             var options = {
-                owner: req.user._id,
+                owner_id: req.user.id,
                 name: req.param('name'),
                 slug: req.param('slug'),
                 description: req.param('description'),
@@ -185,6 +190,7 @@ module.exports = function() {
             });
         },
         update: function(req, res) {
+console.log(__filename, 'update');
             var roomId = req.param('room') || req.param('id');
 
             var options = {
@@ -215,6 +221,7 @@ module.exports = function() {
             });
         },
         archive: function(req, res) {
+console.log(__filename, 'archive');
             var roomId = req.param('room') || req.param('id');
 
             core.rooms.archive(roomId, function(err, room) {
@@ -231,8 +238,9 @@ module.exports = function() {
             });
         },
         join: function(req, res) {
+console.log(__filename, 'join');
             var options = {
-                    userId: req.user._id,
+                    userId: req.user.id,
                     saveMembership: true
                 };
 
@@ -244,6 +252,7 @@ module.exports = function() {
             }
 
             core.rooms.canJoin(options, function(err, room, canJoin) {
+console.log(room, canJoin);
                 if (err) {
                     console.error(err);
                     return res.sendStatus(400);
@@ -267,14 +276,16 @@ module.exports = function() {
                 }
 
                 var user = req.user.toJSON();
-                user.room = room._id;
+                user.room = room.id;
 
                 core.presence.join(req.socket.conn, room);
-                req.socket.join(room._id);
+                req.socket.join(room.id);
+console.log(room.toJSON(req.user));
                 res.json(room.toJSON(req.user));
             });
         },
         leave: function(req, res) {
+console.log(__filename, 'leave');
             var roomId = req.data;
             var user = req.user.toJSON();
             user.room = roomId;
@@ -284,6 +295,7 @@ module.exports = function() {
             res.json();
         },
         users: function(req, res) {
+console.log(__filename, 'users');
             var roomId = req.param('room');
 
             core.rooms.get(roomId, function(err, room) {
