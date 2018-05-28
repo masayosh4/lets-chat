@@ -139,7 +139,6 @@ console.log(__filename, 'list');
                     return room.toJSON(req.user);
                 });
 
-console.log(results);
                 res.json(results);
             });
         },
@@ -160,7 +159,6 @@ console.log(__filename, 'get');
                     return res.sendStatus(404);
                 }
 
-console.log(room.toJSON(req.user));
                 res.json(room.toJSON(req.user));
             });
         },
@@ -252,7 +250,6 @@ console.log(__filename, 'join');
             }
 
             core.rooms.canJoin(options, function(err, room, canJoin) {
-console.log(room, canJoin);
                 if (err) {
                     console.error(err);
                     return res.sendStatus(400);
@@ -280,7 +277,6 @@ console.log(room, canJoin);
 
                 core.presence.join(req.socket.conn, room);
                 req.socket.join(room.id);
-console.log(room.toJSON(req.user));
                 res.json(room.toJSON(req.user));
             });
         },

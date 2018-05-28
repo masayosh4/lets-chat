@@ -75,6 +75,19 @@ RoomManager.prototype.create = function(options, cb) {
 console.log('RoomManager.prototype.create', options);
     return DbModel.Room.create(options)
     .then((room) => {
+      return DbModel.Room.find({
+        include: [{
+          model: DbModel.User,
+          as: 'owner',
+        }, {
+          model: DbModel.User,
+          as: 'participants',
+        }],
+        where: {
+          id: room.id,
+        },
+      });
+    }).then((room) => {
       cb(null, room);
       this.core.emit('rooms:new', room);
     }).catch((err) => {
@@ -86,7 +99,7 @@ RoomManager.prototype.update = function(roomId, options, cb) {
 console.log('RoomManager.prototype.update');
     const promise =  DbModel.Room.find({
       where: {
-        room: roomId,
+        id: roomId,
       }
     }).then((room) => {
         if (!room) {

@@ -63,7 +63,9 @@ function setup(app, session, core) {
 
     passport.deserializeUser(function(id, done) {
         DbModel.User.find({
-          id: id,
+          where: {
+            id: id,
+          },
         }).then((user) => {
           done(null, user);
         }).catch((err) => {

@@ -43,7 +43,7 @@ FileManager.prototype.create = function(options, cb) {
   const promise = Promise.resolve().then(() => {
     return DbModel.Room.find({
       where: {
-        room: options.room,
+        id: options.room,
       },
     });
   }).then((room) => {
@@ -100,8 +100,7 @@ FileManager.prototype.create = function(options, cb) {
       });
     }
   }).catch((err) => {
-    console.error(err.message);
-    return cb(err.message);
+    return cb(err);
   });
   return promise;
 };
@@ -126,7 +125,7 @@ FileManager.prototype.list = function(options, cb) {
   });
 
   let where = {
-    room: options.room
+    room_id: options.room
   };
   if (options.from) {
     where.uploaded = where.uploaded || {};
@@ -143,7 +142,7 @@ FileManager.prototype.list = function(options, cb) {
     if (_.includes(includes, 'owner')) {
       file_include.push({
         model: DbModel.Owner,
-        attributes: ['id', 'username', 'displayName', 'email', 'avatar'],
+        attributes: ['id', 'username', 'displayName', 'email'],
       });
     }
   }
@@ -162,7 +161,7 @@ FileManager.prototype.list = function(options, cb) {
   const promise = Promise.resolve().then(() => {
     return DbModel.Room.find({
       where: {
-        room: options.room,
+        id: options.room,
       }
     });
   }).then((room) => {
@@ -170,24 +169,25 @@ FileManager.prototype.list = function(options, cb) {
       userId: options.userId,
       password: options.password
     };
-    return room.canJoin(opts)
-    .then((canJoin) => {
-      if (!canJoin) {
-        return cb(null, []);
-      }
-    }).then(() => {
-      return DbModel.File.findAll({
-        where: where,
-        includes: file_include,
-        limit: [offset, limit],
-        order: order,
-      }).then((files) => {
-        cb(null, files);
+    return new Promise((resolve) => {
+      return room.canJoin(opts, (canJoin) => {
+        resolve(canJoin);
       });
     });
+  }).then((canJoin) => {
+    if (!canJoin) {
+      return cb(null, []);
+    }
+    return DbModel.File.findAll({
+      where: where,
+      includes: file_include,
+      limit: [offset, limit],
+      order: order,
+    }).then((files) => {
+      cb(null, files);
+    });
   }).catch((err) => {
-    console.error(err.message);
-    return cb(err.message);
+    return cb(err);
   });
   return promise;
 };

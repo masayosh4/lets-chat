@@ -16,11 +16,19 @@ MessageManager.prototype.create = function(options, cb) {
   let t = null;
   let db_room = null;
   let db_message = null;
+  let db_user = null;
   const promise = DbModel.db.transaction().then((p_t) => {
     t = p_t;
     return DbModel.Room.find({
+      include: [{
+        model: DbModel.User,
+        as: 'owner',
+      }, {
+        model: DbModel.User,
+        as: 'participants',
+      }],
       where: {
-        room: options.room,
+        id: options.room,
       },
       transaction: t,
     });
@@ -35,27 +43,34 @@ MessageManager.prototype.create = function(options, cb) {
         throw new Error('Not authorized.');
     }
     db_room = room;
-    return DbModel.Message.create(options, {
+    return DbModel.Message.create({
+      room_id: options.room,
+      owner_id: options.owner,
+      text: options.text,
+    }, {
       transaction: t,
     });
   }).then((message) => {
+    db_message = message;
     // Touch Room's lastActive
     db_room.lastActive = message.posted;
-    return db_room.save();
-  }).then((message) => {
-    db_message = message;
+    return db_room.save({transaction: t});
+  }).then(() => {
     return DbModel.User.find({
       where: {
-        owner: message.owner,
+        id: db_message.owner_id,
       },
       transaction: t,
     });
   }).then((user) => {
-    cb(null, db_message, db_room, user);
-    this.core.emit('messages:new', db_message, db_room, user, options.data);
+    db_user = user;
+    return t.commit();
+  }).then(() => {
+    cb(null, db_message, db_room, db_user);
+    this.core.emit('messages:new', db_message, db_room, db_user, options.data);
   }).catch((err) => {
-    console.error(err.message);
-    return cb(err.message);
+    console.log(err);
+    return cb(err);
   });
   return promise;
 };
@@ -75,7 +90,7 @@ MessageManager.prototype.list = function(options, cb) {
   });
 
   let where = {
-    room: options.room,
+    room_id: options.room,
   };
   if (options.since_id) {
     where.id = {
@@ -103,14 +118,22 @@ MessageManager.prototype.list = function(options, cb) {
 
     if (_.includes(includes, 'owner')) {
       message_include.push({
-        model: DbModel.Owner,
-        attributes: ['id', 'username', 'displayName', 'email', 'avatar'],
+        model: DbModel.User,
+        as: 'owner',
+        attributes: ['id', 'username', 'displayName', 'email'],
       });
     }
     if (_.includes(includes, 'room')) {
       message_include.push({
         model: DbModel.Room,
         attributes: ['id', 'name'],
+        include: [{
+          model: DbModel.User,
+          as: 'owner',
+        }, {
+          model: DbModel.User,
+          as: 'participants',
+        }],
       });
     }
   }
@@ -129,7 +152,7 @@ MessageManager.prototype.list = function(options, cb) {
   const promise = Promise.resolve().then(() => {
     return DbModel.Room.find({
       where: {
-        room: options.room,
+        id: options.room,
       },
     });
   }).then((room) => {
@@ -137,25 +160,30 @@ MessageManager.prototype.list = function(options, cb) {
       userId: options.userId,
       password: options.password
     };
-    // インデント深くする
-    return room.canJoin(opts)
-    .then((canJoin) => {
-      if (!canJoin) {
-        return cb(null, []);
-      }
-    }).then(() => {
-      return DbModel.Message.findAll({
-        where: where,
-        include: message_include,
-        limit: [offset, limit],
-        order: order,
+    return new Promise((resolve, reject) => {
+      return room.canJoin(opts, (err, canJoin) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(canJoin);
       });
+    });
+  }).then((canJoin) => {
+    if (!canJoin) {
+      return cb(null, []);
+    }
+    return DbModel.Message.findAll({
+      where: where,
+      include: message_include,
+      limit: [offset, limit],
+      order: order,
     }).then((messages) => {
       cb(null, messages);
     });
   }).catch((err) => {
-    console.error(err.message);
-    return cb(err.message);
+    console.log(err);
+    return cb(err);
   });
   return promise;
 };

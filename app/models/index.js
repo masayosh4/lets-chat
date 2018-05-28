@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const hash = require('node_hash');
 const settings = require('./../config');
+const SpaceArray = require('./space_array');
 
 class MainTable {
   static setTable(log, sequelize) {
@@ -65,7 +66,18 @@ class MainTable {
       status: {
         type: Sequelize.STRING,
         defaultValue: '',
-        allowNull: false
+        allowNull: false,
+      },
+      openRooms: {
+        type: Sequelize.STRING,
+        defaultValue: '',
+        allowNull: false,
+        get: function() {
+          return SpaceArray.fromString(this.getDataValue('openRooms')).map((it) => { return +it; });
+        },
+        set: function(val) {
+          this.setDataValue('openRooms', SpaceArray.toString([ ...new Set(val) ]));
+        },
       },
     }, {
       freezeTableName: true,
@@ -231,6 +243,18 @@ class MainTable {
           }
           return md5(this.email);
         },
+        toJSON: function() {
+          const data = {
+            id: this.id,
+            firstName: this.firstName,
+            lastName: this.lastName,
+            username: this.username,
+            displayName: this.displayName,
+            avatar: this.avatar(),
+            openRooms: this.openRooms || [],
+          };
+          return data;
+        },
       },
       charset: 'utf8mb4',
       collate: 'utf8mb4_unicode_ci',
@@ -290,7 +314,7 @@ class MainTable {
             };
 
             if (identifier.match(/^[0-9a-fA-F]{24}$/)) {
-                where.$or = [{_id: identifier}, {slug: identifier}];
+                where.$or = [{id: identifier}, {slug: identifier}];
             } else {
                 where.slug = identifier;
             }
@@ -324,8 +348,8 @@ class MainTable {
             }
 
             return this.participants.some(function(participant) {
-                if (participant._id) {
-                    return participant._id.equals(userId);
+                if (participant.id) {
+                    return participant.id.equals(userId);
                 }
 
                 if (participant.equals) {
@@ -378,7 +402,7 @@ class MainTable {
           }.bind(this));
         },
         toJSON: function(user) {
-            var userId = user ? (user._id || user.id || user) : null;
+            var userId = user ? (user.id || user.id || user) : null;
             var authorized = false;
 
             if (userId) {
@@ -388,15 +412,15 @@ class MainTable {
             var room = this.get({plain: true});
 
             var data = {
-                id: room._id,
+                id: room.id,
                 slug: room.slug,
                 name: room.name,
                 description: room.description,
                 lastActive: room.lastActive,
                 created: room.created,
-                owner: room.owner,
+                owner: this.owner.toJSON(),
                 private: room.private,
-                hasPassword: this.hasPassword,
+                hasPassword: this.hasPassword(),
                 participants: []
             };
 
@@ -545,6 +569,30 @@ class MainTable {
         defaultValue: Sequelize.NOW,
       },
     }, {
+      instanceMethods: {
+        toJSON: function(user) {
+          const data = {
+              id: this.id,
+              text: this.text,
+              posted: this.posted,
+  
+              // if populate('owner') and user's been deleted - owner will be null
+              // otherwise it will be an id or undefined
+              owner: this.owner || {
+                  displayName: '[Deleted User]',
+                  username: '_deleted_user_'
+              }
+          };
+  
+          if (this.room && this.room.id) {
+              data.room = this.room.toJSON(user);
+          } else {
+              data.room = this.room;
+          }
+  
+          return data;
+        },
+      },
       freezeTableName: true,
       name: {
         plural: 'message',
@@ -552,11 +600,19 @@ class MainTable {
       charset: 'utf8mb4',
       collate: 'utf8mb4_unicode_ci',
     });
-    table.Room.hasOne(table.Message, {
-      foreignKey: 'room_id'
+    table.Room.hasMany(table.Message, {
+      foreignKey: 'room_id',
     });
-    table.User.hasOne(table.Message, {
-      foreignKey: 'owner_id'
+    table.Message.belongsTo(table.Room, {
+      foreignKey: 'room_id',
+    });
+    table.User.hasMany(table.Message, {
+      foreignKey: 'owner_id',
+      as: 'owner',
+    });
+    table.Message.belongsTo(table.User, {
+      foreignKey: 'owner_id',
+      as: 'owner',
     });
   }
 }
