@@ -42,6 +42,13 @@ FileManager.prototype.create = function(options, cb) {
   let db_savedFile = null;
   const promise = Promise.resolve().then(() => {
     return DbModel.Room.find({
+      include: [{
+        model: DbModel.User,
+        as: 'owner',
+      }, {
+        model: DbModel.User,
+        as: 'participants',
+      }],
       where: {
         id: options.room,
       },
@@ -57,20 +64,14 @@ FileManager.prototype.create = function(options, cb) {
     if (!room.isAuthorized(options.owner)) {
       throw new Error('Not authorized.');
     }
-    return new Promise((resolve, reject) => {
-      new File({
-        owner: options.owner,
-        name: options.file.originalname,
-        type: options.file.mimetype,
-        size: options.file.size,
-        room: options.room
-      }).save((err, savedFile) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve(savedFile);
-      });
+    const file = DbModel.File.build({
+      owner: options.owner,
+      name: options.file.originalname,
+      type: options.file.mimetype,
+      size: options.file.size,
+      room: options.room
     });
+    return file.save();
   }).then((savedFile) => {
     db_savedFile = savedFile;
     return new Promise((resolve,reject) => {
@@ -94,12 +95,13 @@ FileManager.prototype.create = function(options, cb) {
     this.core.emit('files:new', db_savedFile, db_room, user);
     if (options.post) {
       this.core.messages.create({
-        room: db_room,
+        room: db_room.id,
         owner: user.id,
-        text: 'upload://' + db_savedFile.url
+        text: 'upload://' + db_savedFile.url(),
       });
     }
   }).catch((err) => {
+    console.log(err);
     return cb(err);
   });
   return promise;

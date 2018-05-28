@@ -6,6 +6,7 @@
 
 var multer = require('multer'),
     settings = require('./../config').files;
+const DbModel = require('../models/');
 
 module.exports = function() {
 
@@ -15,8 +16,7 @@ module.exports = function() {
 
     var app = this.app,
         core = this.core,
-        middlewares = this.middlewares,
-        models = this.models;
+        middlewares = this.middlewares;
 
     core.on('files:new', function(file, room, user) {
         var fil = file.toJSON();
@@ -59,7 +59,7 @@ module.exports = function() {
     app.route('/files/:id/:name')
         .all(middlewares.requireLogin)
         .get(function(req, res) {
-            models.file.findById(req.params.id, function(err, file) {
+            DbModel.File.findById(req.params.id, function(err, file) {
                 if (err) {
                     // Error
                     return res.send(400);

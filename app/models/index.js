@@ -35,8 +35,6 @@ class MainTable {
       },
       token: {
         type: Sequelize.STRING,
-        defaultValue: '',
-        allowNull: false
       },
       firstName: {
         type: Sequelize.STRING,
@@ -543,6 +541,17 @@ class MainTable {
       instanceMethods: {
         url: function() {
           return 'files/' + this.id + '/' + encodeURIComponent(this.name);
+        },
+      },
+      classMethods: {
+        findById: function(id, cb) {
+          this.find({
+            where: {id: id},
+          }).then((file) => {
+            cb(null, file);
+          }).catch((err) => {
+            cb(err);
+          });
         },
       },
       charset: 'utf8mb4',

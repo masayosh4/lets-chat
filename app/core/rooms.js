@@ -31,7 +31,7 @@ var getParticipants = function(room, options, cb) {
         .uniq()
         .value();
 
-    const promise = Promise.resolve(() => {
+    const promise = Promise.resolve().then(() => {
       return DbModel.User.find({
         where: {
           username: {
@@ -98,6 +98,13 @@ console.log('RoomManager.prototype.create', options);
 RoomManager.prototype.update = function(roomId, options, cb) {
 console.log('RoomManager.prototype.update');
     const promise =  DbModel.Room.find({
+      include: [{
+        model: DbModel.User,
+        as: 'owner',
+      }, {
+        model: DbModel.User,
+        as: 'participants',
+      }],
       where: {
         id: roomId,
       }
@@ -105,7 +112,7 @@ console.log('RoomManager.prototype.update');
         if (!room) {
           throw new Error('Room does not exist.');
         }
-        if(room.private && !room.owner.equals(options.user.id)) {
+        if(room.private && room.owner_id != options.user.id) {
           throw new Error('Only owner can change private room.');
         }
         return new Promise((resolve) => {
@@ -130,16 +137,12 @@ console.log('RoomManager.prototype.update');
           room.password = options.password;
           room.participants = participants;
       }
-      
-      return room.save()
-      .then(() => {
-        return room;
-      });
+      return room.save();
     }).then((room) => {
-      room = room;
       cb(null, room);
       this.core.emit('rooms:update', room);
     }).catch((err) => {
+      console.log(err);
       return cb(err);
     });
     return promise;
@@ -147,28 +150,33 @@ console.log('RoomManager.prototype.update');
 
 RoomManager.prototype.archive = function(roomId, cb) {
 console.log('RoomManager.prototype.archive');
-    const promise = Promise.resolve(() => {
-      return DbModel.Room.find({
-        where: {
-          id: roomId,
-        }
-      });
-    }).then((room) => {
-      if (!room) {
-        throw new Error('Room does not exist.');
-      }
-      room.archived = true;
-      return room.save()
-      .then(() => {
-        return room;
-      });
-    }).then((room) => {
-      cb(null, room);
-      this.core.emit('rooms:archive', room);
-    }).catch((err) => {
-      return cb(err);
+  const promise = Promise.resolve().then(() => {
+    return DbModel.Room.find({
+      include: [{
+        model: DbModel.User,
+        as: 'owner',
+      }, {
+        model: DbModel.User,
+        as: 'participants',
+      }],
+      where: {
+        id: roomId,
+      },
     });
-    return promise;
+  }).then((room) => {
+    if (!room) {
+      throw new Error('Room does not exist.');
+    }
+    room.archived = true;
+    return room.save();
+  }).then((room) => {
+    cb(null, room);
+    this.core.emit('rooms:archive', room);
+  }).catch((err) => {
+    console.log(err);
+    return cb(err);
+  });
+  return promise;
 };
 
 RoomManager.prototype.list = function(options, cb) {

@@ -26,7 +26,7 @@ UserMessageManager.prototype.onMessageCreated = function(message, user, options,
 };
 
 UserMessageManager.prototype.create = function(options, cb) {
-  return Promise.resolve(() => {
+  return Promise.resolve().then(() => {
     return DbModel.User.find({
       where: {
         id:options.user,

@@ -60,14 +60,15 @@ console.log('AccountManager.prototype.update');
       }
     }
     return user.save();
-  }).then(() => {
+  }).then((user) => {
     this.core.emit('account:update', {
       usernameChanged: usernameChange,
       user: user.toJSON()
     });
     cb(null, user);
   }).catch((err) => {
-    cb(err.message);
+    console.log(err);
+    cb(err);
   });
   return promise;
 };
@@ -80,16 +81,23 @@ console.log('AccountManager.prototype.generateToken');
       id: id,
     }
   }).then((user) => {
-    return user.generateToken()
-    .then((token) => {
-      ret = token;
-      this.token = token;
-      return user.save();
-    }).then(() => {
-      cb(null, ret);
-    }).catch((err) => {
-      cb(err.message);
+    return new Promise((resolve, reject) => {
+      user.generateToken((err, token) => {
+        if (err) {
+          return reject(err);
+        }
+        ret = token;
+        user.token = token;
+        resolve(user);
+      });
     });
+  }).then((user) => {
+    return user.save();
+  }).then(() => {
+    cb(null, ret);
+  }).catch((err) => {
+    console.log(err);
+    cb(err);
   });
   return promise;
 };
@@ -102,9 +110,12 @@ console.log('AccountManager.prototype.revokeToken');
     },
   }).then((user) => {
     user.token = null;
-    user.save(() => {
-      cb();
-    });
+    return user.save();
+  }).then(() => {
+    cb(null);
+  }).catch((err) => {
+    console.log(err);
+    cb(err);
   });
   return promise;
 };
